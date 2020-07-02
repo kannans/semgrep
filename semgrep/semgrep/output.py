@@ -1,5 +1,6 @@
 import contextlib
 import json
+import logging
 import sys
 from pathlib import Path
 from typing import Any
@@ -24,10 +25,10 @@ from semgrep.error import FINDINGS_EXIT_CODE
 from semgrep.error import SemgrepError
 from semgrep.rule import Rule
 from semgrep.rule_match import RuleMatch
-from semgrep.util import debug_print
 from semgrep.util import is_url
 from semgrep.util import partition
-from semgrep.util import print_stderr
+
+logger = logging.getLogger(__name__)
 
 
 def color_line(
@@ -87,7 +88,7 @@ def build_normal_output(
 
     last_file = None
     last_message = None
-    for rule_match in sorted(rule_matches, key=lambda r: (r.path, r.id),):
+    for rule_match in sorted(rule_matches, key=lambda r: (r.path, r.id)):
 
         current_file = rule_match.path
         check_id = rule_match.id
@@ -236,26 +237,26 @@ class OutputHandler:
             )
 
             for error in other_errors:
-                print_stderr(str(error))
+                logger.info(str(error))
 
             if len(parse_errors) > 0:
                 files_with_parse_errors: Set[str] = set(
                     str(e._path) for e in parse_errors
                 )
 
-                print_stderr(
+                logger.info(
                     f"{len(files_with_parse_errors)} file(s) failed to parse: {', '.join(files_with_parse_errors)}"
                 )
 
                 if semgrep.util.DEBUG:
-                    debug_print("ParseErrors:")
+                    logger.debug("ParseErrors:")
                     for error in parse_errors:
-                        debug_print(str(error))
-                    debug_print(
+                        logger.debug(str(error))
+                    logger.debug(
                         "= note: If the code is correct, this could be a semgrep bug -- please help us fix this by filing an an issue at https://semgrep.dev"
                     )
                 else:
-                    print_stderr("Run with --verbose to see parse errors")
+                    logger.info("Run with --verbose to see parse errors")
 
     def handle_semgrep_error(self, error: SemgrepError) -> None:
         """
@@ -263,7 +264,7 @@ class OutputHandler:
         """
         self.has_output = True
         self.semgrep_structured_errors.append(error)
-        print_stderr(str(error))
+        logger.info(str(error))
 
     def handle_semgrep_core_output(
         self,
@@ -298,7 +299,7 @@ class OutputHandler:
         the exit code of the program.
         """
         if self.has_output:
-            output = self.build_output(self.settings.output_destination is None,)
+            output = self.build_output(self.settings.output_destination is None)
             if not self.settings.quiet and output:
                 print(output, file=self.stdout)
 
@@ -331,14 +332,14 @@ class OutputHandler:
     def post_output(cls, output_url: str, output: str) -> None:
         import requests  # here for faster startup times
 
-        print_stderr(f"posting to {output_url}...")
+        logger.info(f"posting to {output_url}...")
         try:
             r = requests.post(output_url, data=output, timeout=10)
-            debug_print(f"posted to {output_url} and got status_code:{r.status_code}")
+            logger.debug(f"posted to {output_url} and got status_code:{r.status_code}")
         except requests.exceptions.Timeout:
             raise SemgrepError(f"posting output to {output_url} timed out")
 
-    def build_output(self, color_output: bool,) -> str:
+    def build_output(self, color_output: bool) -> str:
         output_format = self.settings.output_format
         debug_steps = None
         if output_format == OutputFormat.JSON_DEBUG:
